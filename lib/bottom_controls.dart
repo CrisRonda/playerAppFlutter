@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'dart:math';
+import 'package:fluttery_audio/fluttery_audio.dart';
 
 class BottomControls extends StatelessWidget {
   const BottomControls({
@@ -32,7 +33,7 @@ class BottomControls extends StatelessWidget {
                           height: 1.5,
                         )),
                     TextSpan(
-                      text: 'Artist Name',
+                      text: 'Artist Name!',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.75),
                         fontSize: 12,
@@ -81,27 +82,53 @@ class PlayPauseButton extends StatelessWidget {
     Key key,
   }) : super(key: key);
 
+//Aqui se cambia y se usa el Audio Component pues permite el uso de Widget Audio y manejar los eventos del mismo
+//ya que es el boton de play y pause
   @override
   Widget build(BuildContext context) {
-    return RawMaterialButton(
-      shape: StadiumBorder(), //Forma circular
-      fillColor: Colors.white, //Relleno
-      splashColor: lightAccentColor, //Color Splash al pulsar el boton
-      highlightColor: lightAccentColor.withOpacity(
-          0.5), //Acento del color cuando llega al tope de pulsar el boton
-      elevation: 20, //Para darle sombra
-      highlightElevation: 5, //Cierta animacion de hasta donde puede elevarse
-      onPressed: () {
-        // TODO:
+    return new AudioComponent(
+      updateMe: [
+        WatchableAudioProperties.audioPlayerState,
+        //Aqui se actualiza el widget de audio pues el contructor se crea una sola vez
+        //Si se quita este update entonces no se tiene control del boton (RawMaterialButton)
+      ],
+      playerBuilder: (BuildContext context, AudioPlayer player, Widget child) {
+        IconData icon = Icons.music_note;
+        Color buttonColor = lightAccentColor;
+        Function onPressed;
+
+        if (player.state == AudioPlayerState.playing) {
+          icon = Icons.pause;
+          onPressed = player.pause;
+          buttonColor= Colors.white;
+        } else if (player.state == AudioPlayerState.paused ||
+            player.state == AudioPlayerState.completed) {
+          icon = Icons.play_arrow;
+          onPressed = player.play;
+          buttonColor= Colors.white;
+        }
+
+        return RawMaterialButton(
+          shape: StadiumBorder(), //Forma circular
+          fillColor: buttonColor, //Relleno
+          splashColor: lightAccentColor, //Color Splash al pulsar el boton
+          highlightColor: lightAccentColor.withOpacity(0.5),
+          //Acento del color cuando llega al tope de pulsar el boton
+          elevation: 20, //Para darle sombra
+          highlightElevation: 5,
+          //Cierta animacion de hasta donde puede elevarse
+          onPressed: onPressed,
+          child: Padding(
+            padding: EdgeInsets.all(10.0),
+            child: Icon(
+              icon,
+              color: darkAccentColor,
+              size: 35,
+            ),
+          ),
+        );
       },
-      child: Padding(
-        padding: EdgeInsets.all(10.0),
-        child: Icon(
-          Icons.play_arrow,
-          color: darkAccentColor,
-          size: 35,
-        ),
-      ),
+      child: Container(),
     );
   }
 }

@@ -4,6 +4,7 @@ import 'songs.dart';
 import 'theme.dart';
 import 'dart:math';
 import 'package:fluttery_dart2/gestures.dart';
+import 'package:fluttery_audio/fluttery_audio.dart';
 
 void main() => runApp(MyApp());
 
@@ -26,56 +27,108 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios),
-          color: Color(0xffdddddd),
-          onPressed: () {},
-        ),
-        title: Text(""),
-        actions: <Widget>[
-          IconButton(
-            icon: Icon(
-              Icons.menu,
-            ),
+    return Audio(
+      audioUrl: demoPlaylist.songs[0].audioUrl,
+      playbackState: PlaybackState.playing,
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios),
             color: Color(0xffdddddd),
-            onPressed: () {
-              print("holaMundo!");
-            },
+            onPressed: () {},
           ),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          //Expanded es un widget que usa toda la pantalla disponible
-          Expanded(
-            //Aqui agregamos un Cntainer para darle la opcion que dentro de todo el espacio vacio
-            //se adelante o se atrase la cancion
-            child: new RadialSeekBar(),
-          ),
-          //Visualizador
-          Container(
-            width: double.infinity,
-            height: 125.0,
-          ),
-          //Titulo y nombre del artista y los controles
-          //Aqui se cambia el Agrega MAterial para que los IconButtons tenga "animacion" al presionarlos
-          //ESTO SUCEDE PORQUE APARA USAR LAS PROPIEDADES SPLAScOLOR Y HIGHTLIGHCOLOR
-          //NECESITA UN PADRE QUE TENGA LAS PROPIEDADES DE MATERIAL.
-          new BottomControls()
-        ],
+          title: Text(""),
+          actions: <Widget>[
+            IconButton(
+              icon: Icon(
+                Icons.menu,
+              ),
+              color: Color(0xffdddddd),
+              onPressed: () {
+                print("holaMundo!");
+              },
+            ),
+          ],
+        ),
+        body: Column(
+          children: <Widget>[
+            //Expanded es un widget que usa toda la pantalla disponible
+            Expanded(
+              //Aqui agregamos un Container para darle la opcion que dentro de todo el espacio vacio
+              //se adelante o se atrase la cancion
+              child: new AudioRadialSeekBar(),
+            ),
+            //Visualizador
+            Container(
+              width: double.infinity,
+              height: 125.0,
+            ),
+            //Titulo y nombre del artista y los controles
+            //Aqui se cambia el Agrega MAterial para que los IconButtons tenga "animacion" al presionarlos
+            //ESTO SUCEDE PORQUE APARA USAR LAS PROPIEDADES SPLAScOLOR Y HIGHTLIGHCOLOR
+            //NECESITA UN PADRE QUE TENGA LAS PROPIEDADES DE MATERIAL.
+            new BottomControls()
+          ],
+        ),
       ),
     );
   }
 }
 
+class AudioRadialSeekBar extends StatefulWidget {
+
+  @override
+  AudioRadialSeekBarState createState() {
+    return new AudioRadialSeekBarState();
+  }
+}
+
+class AudioRadialSeekBarState extends State<AudioRadialSeekBar> {
+  double _seekPercent;
+
+  @override
+  Widget build(BuildContext context) {
+    return AudioComponent(
+        //El updateMe revisaremos el playhead y el seeking nos da los valores para que el widget
+        //RadialSeekBar vaya dibujando todo
+        updateMe: [
+          WatchableAudioProperties.audioPlayhead,
+          WatchableAudioProperties.audioSeeking
+        ],
+        playerBuilder:
+            (BuildContext context, AudioPlayer player, Widget child) {
+          double playbackProgress = 0.0;
+          if (player.audioLength != null && player.position != null) {
+            playbackProgress = player.position.inMilliseconds /
+                player.audioLength.inMilliseconds;
+          }
+          // revisamos si esta buscando(?) y se settea el valor que se necesite
+          _seekPercent= player.isSeeking?_seekPercent:null; 
+          return RadialSeekBar(
+            progress: playbackProgress,
+            seekPercent: _seekPercent,
+            onSeekRequested: (double seekPercent){
+             setState(()=> _seekPercent=seekPercent);
+             //Valor recuperado para que se vaya actualizando al mm:ss de la cancion que queremos
+             final seekMillis= (player.audioLength.inMilliseconds*seekPercent).round();
+             player.seek(Duration(milliseconds: seekMillis));
+            },
+          );
+        },
+        child: new RadialSeekBar());
+  }
+}
+
 class RadialSeekBar extends StatefulWidget {
+  final double progress;
   final double seekPercent;
+  final Function(double) onSeekRequested; //Funcion para cuando jalemos el thumb (punto)
   RadialSeekBar({
     this.seekPercent = 0.0,
+    this.progress = 0.0,
+    this.onSeekRequested,
   });
   @override
   RadialSeekBarState createState() {
@@ -84,7 +137,7 @@ class RadialSeekBar extends StatefulWidget {
 }
 
 class RadialSeekBarState extends State<RadialSeekBar> {
-  double _seekPercent = 0.0;
+  double _progress = 0.0;
   PolarCoord _startDragCoord;
   double _startDreagPercent;
   double _currentDragPercent;
@@ -92,20 +145,20 @@ class RadialSeekBarState extends State<RadialSeekBar> {
   void initState() {
     // TODO: implement initState
     super.initState();
-    _seekPercent = widget.seekPercent;
+    _progress = widget.progress;
   }
 
   @override
   void didUpdateWidget(RadialSeekBar oldWidget) {
     // TODO: implement didUpdateWidget
     super.didUpdateWidget(oldWidget);
-    _seekPercent = widget.seekPercent;
+    _progress = widget.progress;
   }
 
   void _onDragStart(PolarCoord coord) {
     print("hola desde el inicio");
     _startDragCoord = coord;
-    _startDreagPercent = _seekPercent;
+    _startDreagPercent = _progress;
   }
 
   void _onDragUpdate(PolarCoord coord) {
@@ -114,14 +167,18 @@ class RadialSeekBarState extends State<RadialSeekBar> {
     final dragPercent = dragAngle / (2 * pi);
     setState(() {
       //%sirve para poner un poner porcentaje (normalizar)
-      _currentDragPercent = ((_startDreagPercent + dragPercent )% 1.0);
+      _currentDragPercent = ((_startDreagPercent + dragPercent) % 1.0);
     });
   }
 
   void _onDragEnd() {
+    //manejador del arrastre del tum para que la cancion continue en lo que el % que el usuario decida
+    if(widget.onSeekRequested !=null){
+      widget.onSeekRequested(_currentDragPercent);
+    }
     print("hola desde el final");
     setState(() {
-      _seekPercent = _currentDragPercent;
+      // _progress = _currentDragPercent;
       _currentDragPercent = null;
       _startDragCoord = null;
       _startDreagPercent = 0.0;
@@ -130,6 +187,12 @@ class RadialSeekBarState extends State<RadialSeekBar> {
 
   @override
   Widget build(BuildContext context) {
+    double thumbPosition = _progress;
+    if(_currentDragPercent!=null){
+       thumbPosition=_currentDragPercent;
+    }else if(widget.seekPercent!=null){
+      thumbPosition=widget.seekPercent;
+    }
     return new RadialDragGestureDetector(
       onRadialDragStart: _onDragStart,
       onRadialDragUpdate: _onDragUpdate,
@@ -145,9 +208,11 @@ class RadialSeekBarState extends State<RadialSeekBar> {
             height: 200.0,
             child: new RadialProgressBar(
               trackColor: Color(0xFFdddddd),
-              progressPercent: _currentDragPercent ?? _seekPercent,
+              progressPercent: _progress, 
+              //Aqui cambiamos pues el progreso de la cancion continua reproduciondose
               progressColor: accentColor,
-              thumbPosition: _currentDragPercent ?? _seekPercent,
+              thumbPosition: thumbPosition, 
+              //Al jalar solo este se actualizara y jalaremos solo el thumb no elprogreso de la cancion pero se prodia hacer con los dos
               thumbColor: lightAccentColor,
               innerPadding: const EdgeInsets.all(7.0),
               outerPadding: const EdgeInsets.all(7.0),
