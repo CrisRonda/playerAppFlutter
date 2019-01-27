@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'dart:math';
+
 class BottomControls extends StatelessWidget {
   const BottomControls({
     Key key,
@@ -83,15 +84,13 @@ class PlayPauseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RawMaterialButton(
-      shape: CircleBorder(), //Forma circular
+      shape: StadiumBorder(), //Forma circular
       fillColor: Colors.white, //Relleno
-      splashColor:
-          lightAccentColor, //Color Splash al pulsar el boton
+      splashColor: lightAccentColor, //Color Splash al pulsar el boton
       highlightColor: lightAccentColor.withOpacity(
           0.5), //Acento del color cuando llega al tope de pulsar el boton
       elevation: 20, //Para darle sombra
-      highlightElevation:
-          5, //Cierta animacion de hasta donde puede elevarse
+      highlightElevation: 5, //Cierta animacion de hasta donde puede elevarse
       onPressed: () {
         // TODO:
       },
