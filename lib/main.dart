@@ -27,8 +27,10 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
-    return Audio(
-      audioUrl: demoPlaylist.songs[0].audioUrl,
+    return AudioPlaylist(
+      playlist: demoPlaylist.songs.map((DemoSong song) {
+        return song.audioUrl;
+      }).toList(growable: false),
       playbackState: PlaybackState.playing,
       child: Scaffold(
         appBar: AppBar(
@@ -56,14 +58,35 @@ class _MyHomePageState extends State<MyHomePage> {
           children: <Widget>[
             //Expanded es un widget que usa toda la pantalla disponible
             Expanded(
-              //Aqui agregamos un Container para darle la opcion que dentro de todo el espacio vacio
-              //se adelante o se atrase la cancion
-              child: new AudioRadialSeekBar(),
-            ),
+                //Aqui agregamos un Container para darle la opcion que dentro de todo el espacio vacio
+                //se adelante o se atrase la cancion
+                child: AudioPlaylistComponent(
+              playlistBuilder:
+                  (BuildContext context, Playlist playlist, Widget child) {
+                String albumArtUrl =
+                    demoPlaylist.songs[playlist.activeIndex].albumArtUrl;
+                return AudioRadialSeekBar(albumArtUrl: albumArtUrl);
+              },
+            )),
             //Visualizador
             Container(
               width: double.infinity,
               height: 125.0,
+              child: Visualizer(
+                // En este caso este metodo solo se realiza en Android con la transfformada rapida de fourier (fft)
+                // para IOS en particular se haria de otra forma
+                builder: (BuildContext context, List<int> fft) {
+                  // Hay que susar solo los reales no la parte imaginaria
+                  return CustomPaint(
+                    painter: VisualizerPainter(
+                      fft: fft,
+                      height: 125.0,
+                      color: accentColor,
+                    ),
+                    child: Container(),
+                  );
+                },
+              ),
             ),
             //Titulo y nombre del artista y los controles
             //Aqui se cambia el Agrega MAterial para que los IconButtons tenga "animacion" al presionarlos
@@ -77,8 +100,114 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class AudioRadialSeekBar extends StatefulWidget {
+class VisualizerPainter extends CustomPainter {
 
+  final List<int> fft;
+  final double height;
+  final Color color;
+  final Paint wavePaint;
+
+  VisualizerPainter({
+    this.fft,
+    this.height,
+    this.color,
+  }) : wavePaint = new Paint()
+        ..color = color.withOpacity(0.75)
+        ..style = PaintingStyle.fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _renderWaves(canvas, size);
+  }
+  
+  void _renderWaves(Canvas canvas, Size size) {
+    final histogramLow = _createHistogram(fft, 15, 2, ((fft.length) / 4).floor());
+    final histogramHigh = _createHistogram(fft, 15, (fft.length / 4).ceil(), (fft.length / 2).floor());
+
+    _renderHistogram(canvas, size, histogramLow);
+    _renderHistogram(canvas, size, histogramHigh);
+  }
+
+  void _renderHistogram(Canvas canvas, Size size, List<int> histogram) {
+    if (histogram.length == 0) {
+      return;
+    }
+
+    final pointsToGraph = histogram.length;
+    final widthPerSample = (size.width / (pointsToGraph - 2)).floor();
+
+    final points = new List<double>.filled(pointsToGraph * 4, 0.0);
+
+    for (int i = 0; i < histogram.length - 1; ++i) {
+      points[i * 4] = (i * widthPerSample).toDouble();
+      points[i * 4 + 1] = size.height - histogram[i].toDouble();
+
+      points[i * 4 + 2] = ((i + 1) * widthPerSample).toDouble();
+      points[i * 4 + 3] = size.height - (histogram[i + 1].toDouble());
+    }
+
+    Path path = new Path();
+    path.moveTo(0.0, size.height);
+    path.lineTo(points[0], points[1]);
+    for (int i = 2; i < points.length - 4; i += 2) {
+      path.cubicTo(
+        points[i - 2] + 10.0, points[i - 1],
+        points[i] - 10.0, points [i + 1],
+        points[i], points[i + 1]
+      );
+    }
+    path.lineTo(size.width, size.height);
+    path.close();
+
+    canvas.drawPath(path, wavePaint);
+  }
+
+  List<int> _createHistogram(List<int> samples, int bucketCount, [int start, int end]) {
+    if (start == end) {
+      return const [];
+    }
+
+    start = start ?? 0;
+    end = end ?? samples.length - 1;
+    final sampleCount = end - start + 1;
+
+    final samplesPerBucket = (sampleCount / bucketCount).floor();
+    if (samplesPerBucket == 0) {
+      return const [];
+    }
+
+    final actualSampleCount = sampleCount - (sampleCount % samplesPerBucket);
+    List<int> histogram = new List<int>.filled(bucketCount, 0);
+
+    for (int i = start; i <= start + actualSampleCount; ++i) {
+      if ((i - start) % 2 == 1) {
+        continue;
+      }
+
+      int bucketIndex = ((i - start) / samplesPerBucket).floor();
+      histogram[bucketIndex] += samples[i];
+    }
+
+    //Recoge los valores absolutos del histograma por medio de la fft
+    for (var i = 0; i < histogram.length; ++i) {
+      histogram[i] = (histogram[i] / samplesPerBucket).abs().round();
+    }
+    
+    return histogram;
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return true;
+  }
+
+}
+
+class AudioRadialSeekBar extends StatefulWidget {
+  final String albumArtUrl;
+  AudioRadialSeekBar({
+    this.albumArtUrl,
+  });
   @override
   AudioRadialSeekBarState createState() {
     return new AudioRadialSeekBarState();
@@ -105,16 +234,21 @@ class AudioRadialSeekBarState extends State<AudioRadialSeekBar> {
                 player.audioLength.inMilliseconds;
           }
           // revisamos si esta buscando(?) y se settea el valor que se necesite
-          _seekPercent= player.isSeeking?_seekPercent:null; 
+          _seekPercent = player.isSeeking ? _seekPercent : null;
           return RadialSeekBar(
             progress: playbackProgress,
             seekPercent: _seekPercent,
-            onSeekRequested: (double seekPercent){
-             setState(()=> _seekPercent=seekPercent);
-             //Valor recuperado para que se vaya actualizando al mm:ss de la cancion que queremos
-             final seekMillis= (player.audioLength.inMilliseconds*seekPercent).round();
-             player.seek(Duration(milliseconds: seekMillis));
+            onSeekRequested: (double seekPercent) {
+              setState(() => _seekPercent = seekPercent);
+              //Valor recuperado para que se vaya actualizando al mm:ss de la cancion que queremos
+              final seekMillis =
+                  (player.audioLength.inMilliseconds * seekPercent).round();
+              player.seek(Duration(milliseconds: seekMillis));
             },
+            child: Container(
+              color: accentColor,
+              child: Image.network(widget.albumArtUrl, fit: BoxFit.cover),
+            ),
           );
         },
         child: new RadialSeekBar());
@@ -124,11 +258,16 @@ class AudioRadialSeekBarState extends State<AudioRadialSeekBar> {
 class RadialSeekBar extends StatefulWidget {
   final double progress;
   final double seekPercent;
-  final Function(double) onSeekRequested; //Funcion para cuando jalemos el thumb (punto)
+  final Function(double)
+      onSeekRequested; //Funcion para cuando jalemos el thumb (punto)
+  Widget
+      child; //ae agrego este hijo para que ahora la caratula del album se cambie con la cancion
+
   RadialSeekBar({
     this.seekPercent = 0.0,
     this.progress = 0.0,
     this.onSeekRequested,
+    this.child,
   });
   @override
   RadialSeekBarState createState() {
@@ -173,7 +312,7 @@ class RadialSeekBarState extends State<RadialSeekBar> {
 
   void _onDragEnd() {
     //manejador del arrastre del tum para que la cancion continue en lo que el % que el usuario decida
-    if(widget.onSeekRequested !=null){
+    if (widget.onSeekRequested != null) {
       widget.onSeekRequested(_currentDragPercent);
     }
     print("hola desde el final");
@@ -188,10 +327,10 @@ class RadialSeekBarState extends State<RadialSeekBar> {
   @override
   Widget build(BuildContext context) {
     double thumbPosition = _progress;
-    if(_currentDragPercent!=null){
-       thumbPosition=_currentDragPercent;
-    }else if(widget.seekPercent!=null){
-      thumbPosition=widget.seekPercent;
+    if (_currentDragPercent != null) {
+      thumbPosition = _currentDragPercent;
+    } else if (widget.seekPercent != null) {
+      thumbPosition = widget.seekPercent;
     }
     return new RadialDragGestureDetector(
       onRadialDragStart: _onDragStart,
@@ -204,25 +343,21 @@ class RadialSeekBarState extends State<RadialSeekBar> {
         //Es muy importante el poner el transparente pues asi se esconde el contenedor para poder arrastarar
         child: Center(
           child: Container(
-            width: 200.0,
-            height: 200.0,
+            width: 140.0,
+            height: 140.0,
             child: new RadialProgressBar(
               trackColor: Color(0xFFdddddd),
-              progressPercent: _progress, 
+              progressPercent: _progress,
               //Aqui cambiamos pues el progreso de la cancion continua reproduciondose
               progressColor: accentColor,
-              thumbPosition: thumbPosition, 
+              thumbPosition: thumbPosition,
               //Al jalar solo este se actualizara y jalaremos solo el thumb no elprogreso de la cancion pero se prodia hacer con los dos
               thumbColor: lightAccentColor,
               innerPadding: const EdgeInsets.all(7.0),
               outerPadding: const EdgeInsets.all(7.0),
               child: ClipOval(
                 clipper: CircleClipper(),
-                child: Image.network(
-                  demoPlaylist.songs[1].albumArtUrl,
-                  fit: BoxFit.cover,
-                  //fit para usar cierto tamaño, en este caso el espacio disponible
-                ),
+                child: widget.child,
               ),
             ),
           ),
