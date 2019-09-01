@@ -1,16 +1,11 @@
 # player_app
+Este proyecto se realizó por diversión para probar Flutter en Android!
 
-A new Flutter project.
+## Descripción
+Es un reproductor de música obtenida de SoundCloud, contiene 3 canciones.  
+Muestra su portada y una animación de las frecuencias de la canción que se reproduce.  
 
-## Getting Started
+## Screenshots
 
-This project is a starting point for a Flutter application.
+![20190901_144859](https://user-images.githubusercontent.com/42586480/64081889-c6126600-cccc-11e9-95bc-718662b75cc2.gif)
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://flutter.io/docs/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://flutter.io/docs/cookbook)
-
-For help getting started with Flutter, view our 
-[online documentation](https://flutter.io/docs), which offers tutorials, 
-samples, guidance on mobile development, and a full API reference.
